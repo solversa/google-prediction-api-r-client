@@ -1,0 +1,12 @@
+Package: googlepredictionapi
+Type: Package
+Title: R client library for the Google Prediction API
+Version: 0.1
+Date: 2010-12-02
+Depends: bitops, RCurl, rjson
+Author: Cheng-Neng (Markko) Ko
+Maintainer: Markko Ko <markko@google.com>, Max Lin <whlin@google.com>, Ni Wang <niwang@google.com>
+Description: This package provides a set of functions to access Google Prediction API.
+License: Apache License 2.0
+LazyLoad: yes
+LazyData: yes
