@@ -19,20 +19,12 @@ PredictionApiUtilGetAuth <- function(verbose = FALSE) {
     if (length(auth) != 0)
       return(auth)
   }
-  # prompt user to get email and passwd
-  cat(file.auth, " does not exist, let's create one for you\n", sep='')
-  cat("Please input your email account to access Google Prediction API\n",
-      "(eg. username@gmail.com): ", sep='')
-  email <- scan(file="stdin", what="character", nlines=1, quiet=TRUE)
-  # TODO(whlin): hide the input of password
-  cat("Please input your password for this account\n: ")
-  passwd <- scan(file="stdin", what="character", nlines=1, quiet=TRUE)
-
+  
   # get auth by making a request to Google ClientLogin
   cat("Requesting Authentication from Google ClientLogin for user: ",
-      email, "\n", sep='')
-  result.auth <- PredictionApiUtilRequestAuth(email     = email,
-                                              password  = passwd,
+      myEmail, "\n", sep='')
+  result.auth <- PredictionApiUtilRequestAuth(email     = myEmail,
+                                              password  = myPassword,
                                               verbose   = verbose)
   temp <- unlist(strsplit(result.auth, "Auth=", fixed = TRUE))[2]
   auth <- unlist(strsplit(temp, "\n"))[1]
@@ -63,7 +55,7 @@ PredictionApiUtilRequestAuth <- function(email,
     sprintf(paste("accountType=HOSTED_OR_GOOGLE&",
                   "Email=%s&",
                   "source=R%%20client%%20library&",
-                  "service=xapi&",
+                  "service=predictionapi&",
                   "Passwd=%s", sep=''),
             email,
             PredictionApiUtilUrlencode(password))

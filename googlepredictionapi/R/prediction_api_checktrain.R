@@ -3,6 +3,7 @@
 
 PredictionApiCheckTrain <- function(bucket.name = "",
                                     object.name = "",
+                                    data.tosend = "",
                                     verbose = FALSE) {
   # Checks the training status of an object in Google Storage
   # if it's completed
@@ -46,6 +47,8 @@ PredictionApiCheckTrain <- function(bucket.name = "",
 
   # translate the json result to R object
   result <- PredictionApiJsonToData(result.conn$data, verbose)
+  
+  cat(unlist(result),"\n")
 
   # handle json format data from prediction API
   output <- PredictionApiResultHandler(result.data = result,

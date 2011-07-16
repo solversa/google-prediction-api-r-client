@@ -1,5 +1,18 @@
 # Copyright 2010 Google Inc. All Rights Reserved.
 # Author: markko@google.com (Markko Ko)
+#
+# ---
+#
+# modified for Google API v1.2 and extended by Maciej Janiec (mjaniec@gmail.com), 2011-05-30
+
+myPython 			<- ""
+myGSUtilPath 	<- ""
+
+PythonCommand <- function(command) {
+
+	return(paste(myPython," ",myGSUtilPath,command,sep=""))
+
+}
 
 PredictionApiUtilGsutil <- function(command, verbose = FALSE,
                                     run.in.background = FALSE) {
@@ -27,14 +40,18 @@ PredictionApiUtilGsutil <- function(command, verbose = FALSE,
   check.error.pattern.string <- "^Failure"
   auth.file <- "~/.boto"
   if (!file.exists(auth.file))
-    PredictionApiUtilgetGsutilAuth(auth.file)
+    stop(".boto file missing")
+    # PredictionApiUtilgetGsutilAuth(auth.file)
 
   # check command
   if (missing(command) || nchar(command) == 0)
     stop("Please specify command\n")
 
   # run command
-  command <- paste(command, " 2>&1", sep='')
+  # command <- paste(command, " 2>&1", sep='') ???
+  
+  command <- PythonCommand(command)
+  
   if (verbose)
     cat("Command: ", command, "\n")
   result <- (if (run.in.background) system(command = command, wait = FALSE)
@@ -63,6 +80,7 @@ PredictionApiUtilGsutil <- function(command, verbose = FALSE,
   return(output)
 }
 
+# CURRENTLY UNUSED; .BOTO MUST BE CREATED MANUALLY WITH GSUTIL CONFIG
 PredictionApiUtilgetGsutilAuth <- function(auth.file) {
   # Prompts user to input key and secret for gsutil and use gsutil to
   # establish the authentication
@@ -71,19 +89,13 @@ PredictionApiUtilgetGsutilAuth <- function(auth.file) {
   # Returns:
   key <- ""
   secret <- ""
-  while (nchar(key) == 0 || nchar(secret) == 0) {
-    cat("gsutil authentication file(", auth.file, ") does not exist, ",
-        "trying to make one for you:\n", sep='')
-    cat("Please input your Access Key for accessing Google Storage\n",
-        "(eg. GOOGXXXXXXXXXXXXXXXX): ", sep='')
-    key <- scan(file="stdin", what="character", nlines=1, quiet=TRUE)
-    cat("Please input your secret for this key\n: ")
-    secret <- scan(file="stdin", what="character", nlines=1, quiet=TRUE)
-  }
+  if (nchar(key) == 0 || nchar(secret) == 0)
+    stop("Google Storage Access Key or Secret missing.")
+
   # write into temp file
   file.temp <- tempfile()
   write(paste(key, "\n", secret, sep=''), file = file.temp)
-  command <- paste("gsutil < ", file.temp, sep='')
+  command <- PythonCommand(paste("gsutil < ", file.temp, sep=''))
   result <- system(command, intern = TRUE)
   if (!file.remove(file.temp))
     cat("Remove temp file error: ", file.temp, "\n", sep='')
@@ -179,6 +191,9 @@ PredictionApiUtilUpload <- function(file.name,
   check <- PredictionApiDoesObjectExist(bucket.name = bucket.name,
                                         object.name = object.name,
                                         verbose     = verbose)
+  
+  if (verbose) cat("Object status:",check$result,"\n")                                        
+                                        
   if (check$result == "error") {
     warning("Error, see return value for more information\n")
     return(check)
@@ -212,7 +227,8 @@ PredictionApiUtilUpload <- function(file.name,
     while (!check.passed) {
       check <- PredictionApiDoesObjectExist(bucket.name = bucket.name,
                                             object.name = object.name,
-                                            verbose     = verbose)
+                                            verbose     = verbose)                                       
+                                           
       if (check$result == "error") {
         warning("Error, see return value for more information\n")
         return(check)
@@ -251,7 +267,10 @@ PredictionApiDoesObjectExist <- function(bucket.name,
   #   error:    {result="error", value=error.code}
   #   found:    {result="found", value=bucket.name/object.name}
   #   notFound: {result="notFound", value=message}
+  
   check.no.object.string <- "matches no objects"
+  check.invalid.uri <- "URI is invalid"
+  
   check <- PredictionApiUtilLs(bucket.name    = bucket.name,
                                object.name    = object.name,
                                verbose        = verbose)
@@ -261,7 +280,8 @@ PredictionApiDoesObjectExist <- function(bucket.name,
   if (verbose)
     cat("CheckObject: ", check$value, "\n")
 
-  check$result <- (if (length(grep(check.no.object.string, check$value)) == 0)
+  check$result <- (if ( (length(grep(check.no.object.string, check$value)) == 0) &&
+  											(length(grep(check.invalid.uri, check$value)) == 0) )
                    "found" else "notFound")
   return(check)
 }

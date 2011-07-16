@@ -1,9 +1,13 @@
 # Copyright 2010 Google Inc. All Rights Reserved.
 # Author: markko@google.com (Markko Ko)
+# ---
+#
+# modified for Google API v1.2 and extended by Maciej Janiec (mjaniec@gmail.com), 2011-05-31
 
 PredictionApiResultHandler <- function(result.data = "",
                                        mode = "train",
-                                       verbose = FALSE) {
+                                       data.type = "numeric",
+                                       verbose = myVerbose) {
   # Handles json format result from Google Prediction API
   # and outputs a R style result object with status information.
   # It accepts three connection modes: "train", "predict", "check"
@@ -51,19 +55,23 @@ PredictionApiResultHandler <- function(result.data = "",
   #         4. object.name
 
   # string for detecting training status in checking
-  flag.check <- "Training has not completed."
+  flag.check <- "RUNNING"
 
   # check input
   mode.type = c("train", "predict", "check")
   mode <- match.arg(mode, mode.type)
+  
   if (missing(result.data) || length(result.data) == 0)
     stop("'result.data' should not be empty")
 
   # handle prediction result
   if (mode == "predict") {
+  	if (verbose) cat(as.character(result.data),"\n")
+  
     # handle json from prediction API
-    # get label as result
-    result.final <- result.data$data$outputLabel
+    # get label as result    
+    result.final <- ifelse(data.type=="text",result.data$outputLabel,result.data$outputValue)
+    
     # check if error
     if (is.null(result.final)) {
       return(list(result = "error",
@@ -71,14 +79,44 @@ PredictionApiResultHandler <- function(result.data = "",
                   error.message = result.data$error$message,
                   error.information = result.data$error$errors))
     }
+    
+    if (data.type=="text") {
+    
+    	result.final$multi <- length(result.data$outputMulti)
+
+			result.final$labels <- character(result.final$multi)
+			result.final$scores <- double(result.final$multi)
+
+			for (i in 1:result.final$multi) {
+
+				result.final$labels[i] <- result.data$outputMulti[[i]]$label
+				result.final$scores[i] <- result.data$outputMulti[[i]]$score
+	
+			}
+			
+			result.final$order <- order(result.final$scores,decreasing=TRUE)
+			
+			result.final$labels <- result.final$labels[result.final$order]
+			result.final$scores <- result.final$scores[result.final$order]
+			
+			result.final <- c(result.final$labels,result.final$scores)
+    
+    }     
+    
     return(result.final)
   }
+  
   # handle training result
   # the format of json result is:
-  #{"data" : { "data" : "${mybucket}/${mydata}"} } }
+  # {
+  # 	"kind":"prediction#training",
+  # 	"id":"training_bucket/training_data",
+  # 	"selfLink":"https://www.googleapis.com/prediction/v1.2/URL_of_resource,
+	# }
+	# prev: {"data" : { "data" : "${mybucket}/${mydata}"} } }
   if (mode == "train") {
     # check error on result
-    result.label <- result.data$data$data
+    result.label <- result.data$id
     if (is.null(result.label)) {
       # if error, output the error code and reason in json
       # get error code
@@ -92,19 +130,20 @@ PredictionApiResultHandler <- function(result.data = "",
     return(list(result = "correct",
                 accuracy = "0.0",
                 bucket.name = data.name[1],
-                object.name = data.name[2]))
+                object.name = substr( result.label, (regexpr("/",result.label)[1]+1), nchar(result.label) )
+           			))  
   }
 
   # handle checking result
   if (mode == "check") {
     # check error on result
     # get label
-    result.label <- result.data$data$data
+    result.label <- result.data$id
 
     if (is.null(result.label)) {
       # if error, output the error code and reason
       # get error code
-      return(list(result = "error",
+      return(list(result = "ERROR",
                   error.code = result.data$error$code,
                   error.message = result.data$error$message,
                   error.information = result.data$error$errors))
@@ -119,18 +158,21 @@ PredictionApiResultHandler <- function(result.data = "",
     # "modelinfo":"estimated accuracy: 0.74"}}}
 
     # get information from result
-    modelinfo <- result.data$data$modelinfo
-    data.label <- result.data$data$data
+    modelinfo <- result.data$trainingStatus
+    data.label <- result.data$id
     if (modelinfo == flag.check) {
-      output <- list(result = "notFinish")
+      output <- list(result = "RUNNING")
     } else {
       # split and get accuracy and location in Google Storage
-      accuracy <- (unlist(strsplit(modelinfo, ":"))[2])
+      accuracy <- result.data$modelInfo$classificationAccuracy
+      model_type <- result.data$modelInfo$modelType
       data.name <- unlist(strsplit(data.label, "/", fixed = TRUE))
-      output <- list(result = "finished",
+      output <- list(result = "DONE",
                      accuracy = accuracy,
+                     model_type = model_type,
                      bucket.name = data.name[1],
-                     object.name = data.name[2])
+                     object.name = substr( result.label, (regexpr("/",result.label)[1]+1), nchar(result.label) )
+                     )
     }
     return(output)
   }
