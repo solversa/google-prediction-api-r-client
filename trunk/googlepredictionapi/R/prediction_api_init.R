@@ -4,15 +4,41 @@
 # Purpose:
 # 1. Import all required packages and functions
 # 2. Define user interface
+#
+# ---
+#
+# modified for Google API v1.2 and extended by Maciej Janiec (mjaniec@gmail.com), 2011-05-30
+
 
 # There are two places using this version number:
 # 1. DESCRIPTION file
 # 2. init.R
-kVersion <- '0.1'
+kVersion <- '0.15'
+
+myEmail <- ""
+myPassword <- ""
+myAPIkey <- ""
+
+myVerbose <- FALSE
+myRetry <- TRUE
+
+GetPredictionSet <- function(bucket,object) {
+
+	paste('{"id" : "',bucket,'/',object,'"}',sep="")
+
+}
+
+HexSlash <- function(object) {
+
+	gsub("/","%2F",object)
+
+}
 
 PredictionApiTrain <- function(data,
                                remote.file,
-                               verbose = FALSE) {
+                               verbose = myVerbose,
+                               retry = myRetry,
+                               tillDone = FALSE) {
   # Trains a model using data you provided through Google Prediction
   # API. It accepts two types of data:
   #
@@ -56,6 +82,7 @@ PredictionApiTrain <- function(data,
   #   remote.file: the location of object to be trained in Google Storage
   #     e.g. "bucket.name/wdbcData", or "gs://bucket.name/wdbcData"
   #   verbose: If TRUE, print out all detail for debugging. Default is FALSE.
+  #		tillDone - repeat checking for training results till training is completed
   # Returns:
   #   model with class type: "PredictionApiModel"
 
@@ -69,13 +96,14 @@ PredictionApiTrain <- function(data,
     data.type <- "file"
     local.file <- data
   } else {
-    check.result <- PredictionApiTrainParseRemoteFile(data)
+    check.result <- PredictionApiTrainParseRemoteFile(data) # @ prediction_api.train_runner.R
     if (!check.result$well.formed) {
       stop(paste("The data should be: file, or remote file\n",
                  " file:         should be an existing local file\n",
                  " remote file:  string with format 'bucket.name/object.name' or
                             'gs://bucket.name/object.name' \n"))
     }
+    
     data.type <- "remote"
     remote.file <- data
     if (nchar(remote.file) != 0 && remote.file != data)
@@ -91,18 +119,21 @@ PredictionApiTrain <- function(data,
     if (missing(remote.file))
       stop("Need to specify 'remote.file'\n")
   }
+  
   # check remote.file format
-  check.result <- PredictionApiTrainParseRemoteFile(remote.file)
+  check.result <- PredictionApiTrainParseRemoteFile(remote.file) # @ prediction_api.train_runner.R
   if (!check.result$well.formed)
     stop("remote.file format error: should be string with format: ",
         "\"bucket.name/object.name\" or \"gs://bucket.name/object.name\"\n")
 
-  # passed to TrainRunner
+  # passed to TrainRunner @ prediction_api.train_runner.R
   result <- PredictionApiTrainRunner(data.type = data.type,
                                      data = data,
                                      remote.file = remote.file,
                                      local.file = local.file,
-                                     verbose = verbose)
+                                     verbose = verbose,
+                                     retry = retry,
+                                     tillDone = tillDone)
   return(result)
 }
 
@@ -131,7 +162,7 @@ summary.PredictionApiModel <- function(object, ...) {
 
 predict.PredictionApiModel <- function(object,
                                        newdata,
-                                       verbose = FALSE,
+                                       verbose = myVerbose,
                                        ...) {
   # Predicts the label of newdata using model on Prediction API.
   # example: not runnable, you need to provide bucket.name and object.name
@@ -185,7 +216,7 @@ predict.PredictionApiModel <- function(object,
 
 PredictionApiCheckTrainingStatus <- function(bucket.name,
                                              object.name,
-                                             verbose = FALSE) {
+                                             verbose = myVerbose) {
   # Checks if the training of the given object is completed
   # example:
   #    # to check if the training of gs://bucket.name/object.name is finished
@@ -219,14 +250,14 @@ PredictionApiCheckTrainingStatus <- function(bucket.name,
     stop("'object.name' should not empty")
 
   result <- PredictionApiCheckTrain(bucket.name = bucket.name,
-                                    object.name = object.name,
+                                    object.name = HexSlash(object.name),
                                     verbose = verbose)
   return(result)
 }
 
 PredictionApiListObjects <- function(bucket.name = "",
                                      object.name = "",
-                                     verbose = FALSE) {
+                                     verbose = myVerbose) {
   # Lists all buckets if object.name is not provided
   # or list all objects if bucket.name is provided.
   # example:
@@ -250,7 +281,7 @@ PredictionApiListObjects <- function(bucket.name = "",
   #     3. code: error code from Google Storage API
   #     4. reason: reason message from Google Storage API
 
-  result <- PredictionApiUtilLs(bucket.name = bucket.name,
+  result <- PredictionApiUtilLs(bucket.name = bucket.name, # @ prediction_api_storage_util.R
                                 object.name = object.name,
                                 verbose = verbose)
   return(result)
@@ -258,7 +289,7 @@ PredictionApiListObjects <- function(bucket.name = "",
 
 PredictionApiRemoveObjects <- function(bucket.name,
                                        object.name,
-                                       verbose = FALSE) {
+                                       verbose = myVerbose) {
   # Removes the given object in Google Storage
   #
   # Args:

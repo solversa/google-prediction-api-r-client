@@ -5,7 +5,8 @@ PredictionApiConnectHandler <- function(connect.type,
                                         bucket.name,
                                         object.name,
                                         data.tosend,
-                                        verbose = FALSE) {
+                                        verbose = FALSE,
+                                        retry = FALSE) {
   # Handles the connection to Google Prediction API and return the result
   # with status information. This function supports four connection types:
   # "train", "predict", "check", "auth"
@@ -20,10 +21,10 @@ PredictionApiConnectHandler <- function(connect.type,
 
   # get auth
   if (connect.type != "auth")
-    auth <- PredictionApiUtilGetAuth(verbose = verbose)
+    auth <- PredictionApiUtilGetAuth(verbose = verbose) # @ prediction_api_get_auth_token.R
 
   # when connection fails, the number of times to retry
-  retry.number.of.times <- 3
+  retry.number.of.times <- ifelse(retry==TRUE,3,1)
   # when connection fails, how long to wait to retry (second)
   retry.sleep.time.in.seconds <- 0.5
   # check input
@@ -35,19 +36,18 @@ PredictionApiConnectHandler <- function(connect.type,
 
   if (connect.type == "train") {
     # prepare url for connection
-    url <- paste("https://www.googleapis.com/prediction/v1.1/training?data=",
-                 bucket.name, "%2F", object.name, sep="")
+    url <- paste("https://www.googleapis.com/prediction/v1.2/training?key=",myAPIkey,sep="")
 
     # set the header
     header.field <-
       c('Authorization' = paste("GoogleLogin auth=", auth, sep=''),
         'User-Agent' = paste('R client library for the Google Prediction API',
           'v', kVersion, sep=''),
-        'Content-Type' = "application/json")
+          'Content-Type' = "application/json")
 
   } else if (connect.type == "predict") {
-    url <- paste("https://www.googleapis.com/prediction/v1.1/training/",
-                 bucket.name, "%2F", object.name, "/predict", sep='')
+    url <- paste("https://www.googleapis.com/prediction/v1.2/training/",
+                 bucket.name, "%2F", HexSlash(object.name), "/predict?key=",myAPIkey, sep='')
 
     # set the header
     header.field <-
@@ -58,8 +58,8 @@ PredictionApiConnectHandler <- function(connect.type,
 
   } else if (connect.type == "check") {
     # prepare url
-    url <- paste("https://www.googleapis.com/prediction/v1.1/training/",
-                 bucket.name, "%2F", object.name, sep='')
+    url <- paste("https://www.googleapis.com/prediction/v1.2/training/",
+                 bucket.name, "%2F", HexSlash(object.name),"?key=",myAPIkey, sep='')
     header.field <-
       c('Authorization' = paste("GoogleLogin auth=", auth, sep=''),
         'User-Agent' = paste('R client library for the Google Prediction API',
@@ -87,8 +87,20 @@ PredictionApiConnectHandler <- function(connect.type,
   h <- basicHeaderGatherer()
 
   # connect to API, if fails, try retry.number.of.times times
+  
+  if (verbose) {
+  	cat("Request to be send:\n")
+  	cat("TYPE=",connect.type,"\n")
+  	cat("URL=",url,"\n")
+  	cat("POST=",data.tosend,"\n")
+  	cat("HEAD=",header.field,"\n")  
+  }	
+  
   retry <- 0
   while (retry < retry.number.of.times) {
+  		if (verbose)
+  			cat("Connection attempt no.:",(retry+1),"\n")
+  
     # Perform query
     if (connect.type == "check") {
       curlSetOpt(.opts = list(httpget = 1), curl = curl)
@@ -103,9 +115,13 @@ PredictionApiConnectHandler <- function(connect.type,
                          writefunction = t$update,
                          headerfunction = h$update)
     }
-
-    if (verbose)
-      cat(d$value())
+    
+    if (verbose) {
+      cat("Returned values:\n")
+    	cat("T=",t$value())
+      cat("H=",h$value())
+      cat("D=",d$value())
+      }
 
     # prepare output
     output <- list(succeed.connect = TRUE,
@@ -122,8 +138,8 @@ PredictionApiConnectHandler <- function(connect.type,
     Sys.sleep(retry.sleep.time.in.seconds)
     retry <- retry + 1
     warning("Connection error: status:", output$status,
-            ", status message:", output$status.message,
-            ", let's try again: ", retry, "\n")
+            ", status message:", output$status.message,"\n")           
   }
+     
   return(output)
 }

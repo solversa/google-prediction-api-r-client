@@ -21,6 +21,7 @@ PredictionApiJsonToData <- function(data, verbose = FALSE) {
 
   if (verbose)
     cat(paste("to Data:", result), "\n")
+    
   return(result)
 }
 
@@ -44,6 +45,7 @@ PredictionApiDataToJson <- function(data, verbose = FALSE) {
 
   if (verbose)
     cat(paste("to Json:", result))
+    
   return(result)
 }
 

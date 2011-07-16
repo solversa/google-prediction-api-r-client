@@ -3,7 +3,7 @@
 
 PredictionApiPredictRunner <- function(model,
                                        newdata,
-                                       verbose = FALSE) {
+                                       verbose = myVerbose) {
   # Predicts the label of newdata (one instance) using model
   # on Google Prediction API
   #
@@ -21,44 +21,48 @@ PredictionApiPredictRunner <- function(model,
   #     2. error.code
   #     3. error.message
   #     4. error.information
+  #
+  # Accepted data formats:
+  #
+  # "'some string data', 'singleval', 123 "
+  # "1234, 'Man\'s best friend' "
+  # "1234, 3345" 														- Numerical data does not need additional quotes.
 
   bucket.name <- model$bucket.name
   object.name <- model$object.name
+  
+  if (length(newdata)>1) newdata <- as.character(lapply(list(newdata),paste,collapse=", "))
 
-  # detect newdata type: "numeric" or "text"
-  if (is.character(newdata[[1L]])) {
+  # detect newdata type: "numeric" or "text" ("text" may also means mixed data)
+  if (length(grep("'",newdata))>0) {
     if (verbose)
       cat("'newdata' detected as text\n")
     predict.type <- "text"
-  } else if (is.numeric(newdata[[1L]])) {
+  } else if (attr(regexpr("[\\d|\\.|\\-|\\+|e| |\\,]+",newdata,perl=TRUE),"match.length")==nchar(newdata)) {
+  	# numeric data must conists of: digits . - + e space ,
     if (verbose)
       cat("'newdata' detected as numeric\n")
     predict.type <- "numeric"
   } else {
     stop("The class type of 'newdata' should be either character or numeric")
   }
+  
   # number of row should be no more than 1
   row <- nrow(newdata)
   if (!is.null(row) && row > 1) {
     stop("'newdata' should only have one row: ", newdata)
   }
-  # translate newdata into json string
-  # make json object
-  # if only one string: need to cast to a list
-  if (length(newdata) == 1)
-    newdata <- list(newdata)
-
-  if (predict.type == "numeric") {
-    tempx <- list(data = list(input = list(numeric = as.numeric(newdata))))
-  } else if (predict.type == "text") {
-    tempx <- list(data = list(input = list(text = newdata)))
+  
+  # mixed types need surrounding with "
+  if (predict.type == "text") {
+  	newdata <- paste('\"',newdata,'\"',sep="")
   }
-  if (verbose) {
-    cat("data to send:\n")
-    print(tempx)
-  }
-  # get json string data by sending newdata to jsonParser
-  data.tosend <- PredictionApiDataToJson(tempx, verbose = verbose)
+  
+  data.tosend <- paste('{\"input\" : { \"csvInstance\" : [ ',newdata,' ]}}',sep="")
+  
+  if (verbose)
+    cat("data to send:",data.tosend,"\n")
+  
 
   # connect to Prediction API and get result
   result.conn <- PredictionApiConnectHandler(connect.type = "predict",
@@ -73,6 +77,7 @@ PredictionApiPredictRunner <- function(model,
   # handle json from prediction API
   output <- PredictionApiResultHandler(result.data  = result,
                                        mode         = "predict",
+                                       data.type		= predict.type,
                                        verbose      = verbose)
 
   # handle result
